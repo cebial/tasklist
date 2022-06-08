@@ -4,8 +4,18 @@ import kotlinx.datetime.*
 import java.time.LocalTime
 import java.time.format.DateTimeParseException
 
-data class Task(var date: String, var time: String, var priority: String, var description: List<String>) {
-    val dueTag: String
+enum class Ansi(val color: String) {
+    RED("\u001B[101m \u001B[0m"),
+    YELLOW("\u001B[103m \u001B[0m"),
+    GREEN("\u001B[102m \u001B[0m"),
+    BLUE("\u001B[104m \u001B[0m"),
+}
+
+val prioToAnsi = mapOf("C" to Ansi.RED.color, "H" to Ansi.YELLOW.color, "N" to Ansi.GREEN.color, "L" to Ansi.BLUE.color)
+val dueToAnsi = mapOf("I" to Ansi.GREEN.color, "T" to Ansi.YELLOW.color, "O" to Ansi.RED.color)
+
+data class Task(var date: String, var time: String, var prio: String, var text: List<String>) {
+    val due: String
         get() {
             val t = Clock.System.now().toLocalDateTime(TimeZone.of("UTC+0"))
                 .date.daysUntil(date.toLocalDate())
@@ -45,21 +55,21 @@ class TaskList {
         }
     }
 
-    private fun requestDescription(): List<String> {
+    private fun requestText(): List<String> {
         println("Input a new task (enter a blank line to end):")
-        val desc = mutableListOf<String>()
-        while (readln().trim().takeIf { it.isNotBlank() }?.let { desc.add(it) } == true);
-        return desc
+        val text = mutableListOf<String>()
+        while (readln().trim().takeIf { it.isNotBlank() }?.let { text.add(it) } == true);
+        return text
     }
 
     private fun addTask() {
         val prio = requestPriority()
         val date = requestDate()
         val time = requestTime()
-        val desc = requestDescription()
+        val text = requestText()
 
-        if (desc.isEmpty()) println("The task is blank")
-        else tasks.add(Task(date, time, prio, desc))
+        if (text.isEmpty()) println("The task is blank")
+        else tasks.add(Task(date, time, prio, text))
     }
 
     private fun printList(): Boolean {
@@ -67,10 +77,21 @@ class TaskList {
             println("No tasks have been input"); return false
         }
 
+        val bar = "+----+------------+-------+---+---+--------------------------------------------+\n"
+        println("$bar| N  |    Date    | Time  | P | D |                   Task                     |$bar")
+
         tasks.forEachIndexed { i, t ->
-            println("%-2s".format(i + 1) + " ${t.date} ${t.time} ${t.priority} ${t.dueTag}")
-            t.description.forEach { println("   $it") }
-            println()
+            print("| ${"%-2s".format(i + 1)} | ${t.date} | ${t.time} | ${prioToAnsi[t.prio]} | ${dueToAnsi[t.due]} |")
+
+            t.text.forEachIndexed { j, line ->
+                var n = 0
+                while (n < line.length) {
+                    if (j + n > 0) print("|    |            |       |   |   |")
+                    println("%-44s|".format(line.substring(n, minOf(n + 44, line.length))))
+                    n += 44
+                }
+            }
+            print(bar)
         }
         return true
     }
@@ -96,10 +117,10 @@ class TaskList {
 
         val idx = getTaskIndex()
         when (inputField()) {
-            "priority" -> tasks[idx].priority = requestPriority()
+            "priority" -> tasks[idx].prio = requestPriority()
             "date" -> tasks[idx].date = requestDate()
             "time" -> tasks[idx].time = requestTime()
-            "task" -> requestDescription().takeIf { it.isNotEmpty() }?.let { tasks[idx].description = it }
+            "task" -> requestText().takeIf { it.isNotEmpty() }?.let { tasks[idx].text = it }
         }
 
         println("The task is changed")
