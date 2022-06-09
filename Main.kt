@@ -3,6 +3,10 @@ package tasklist
 import kotlinx.datetime.*
 import java.time.LocalTime
 import java.time.format.DateTimeParseException
+import com.squareup.moshi.*
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import java.io.File
+import java.lang.reflect.ParameterizedType
 
 enum class Ansi(val color: String) {
     RED("\u001B[101m \u001B[0m"),
@@ -10,9 +14,6 @@ enum class Ansi(val color: String) {
     GREEN("\u001B[102m \u001B[0m"),
     BLUE("\u001B[104m \u001B[0m"),
 }
-
-val prioToAnsi = mapOf("C" to Ansi.RED.color, "H" to Ansi.YELLOW.color, "N" to Ansi.GREEN.color, "L" to Ansi.BLUE.color)
-val dueToAnsi = mapOf("I" to Ansi.GREEN.color, "T" to Ansi.YELLOW.color, "O" to Ansi.RED.color)
 
 data class Task(var date: String, var time: String, var prio: String, var text: List<String>) {
     val due: String
@@ -24,7 +25,11 @@ data class Task(var date: String, var time: String, var prio: String, var text: 
 }
 
 class TaskList {
-    private val tasks = mutableListOf<Task>()
+    private val prioToAnsi = mapOf("C" to Ansi.RED.color, "H" to Ansi.YELLOW.color, "N" to Ansi.GREEN.color, "L" to Ansi.BLUE.color)
+    private val dueToAnsi = mapOf("I" to Ansi.GREEN.color, "T" to Ansi.YELLOW.color, "O" to Ansi.RED.color)
+
+    private var tasks = mutableListOf<Task>()
+    private val jsonFile = File("tasklist.json")
 
     private fun String.fixSingleDigits() = "\\b(\\d)\\b".toRegex().replace(this, "0$1")
 
@@ -77,8 +82,8 @@ class TaskList {
             println("No tasks have been input"); return false
         }
 
-        val bar = "+----+------------+-------+---+---+--------------------------------------------+\n"
-        println("$bar| N  |    Date    | Time  | P | D |                   Task                     |$bar")
+        val bar = "+----+------------+-------+---+---+--------------------------------------------+"
+        println("$bar\n| N  |    Date    | Time  | P | D |                   Task                     |\n$bar")
 
         tasks.forEachIndexed { i, t ->
             print("| ${"%-2s".format(i + 1)} | ${t.date} | ${t.time} | ${prioToAnsi[t.prio]} | ${dueToAnsi[t.due]} |")
@@ -91,7 +96,7 @@ class TaskList {
                     n += 44
                 }
             }
-            print(bar)
+            println(bar)
         }
         return true
     }
@@ -133,7 +138,18 @@ class TaskList {
         println("The task is deleted")
     }
 
+    object TaskWriter {
+        private val moshi: Moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+        private val type: ParameterizedType = Types.newParameterizedType(List::class.java, Task::class.java)
+        private val tasksAdapter: JsonAdapter<List<Task>> = moshi.adapter(type)
+
+        fun read(file: File) = tasksAdapter.fromJson(file.readText()) as MutableList<Task>
+        fun write(file: File, tasks: List<Task>) = file.writeText(tasksAdapter.toJson(tasks))
+    }
+
     fun run() {
+        if (jsonFile.exists()) tasks = TaskWriter.read(jsonFile)
+
         while (true) {
             println("Input an action (add, print, edit, delete, end):")
             when (readln().lowercase()) {
@@ -145,6 +161,8 @@ class TaskList {
                 else -> println("The input action is invalid")
             }
         }
+
+        TaskWriter.write(jsonFile, tasks)
         println("Tasklist exiting!")
     }
 }
